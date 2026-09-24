@@ -1,0 +1,9 @@
+{
+  "name": "StarLive - Social Live Community",
+  "description": "Mobile-responsive social live streaming and party audio community with live rooms, moments, coin gifting, direct messaging, and admin management.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

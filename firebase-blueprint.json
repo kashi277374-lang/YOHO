@@ -1,0 +1,252 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account and profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "bio": { "type": "string" },
+        "country": { "type": "string" },
+        "countryFlag": { "type": "string" },
+        "coins": { "type": "number" },
+        "level": { "type": "number" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "followersCount": { "type": "number" },
+        "followingCount": { "type": "number" },
+        "isLive": { "type": "boolean" },
+        "currentRoomId": { "type": "string" },
+        "badges": { "type": "array" },
+        "isBanned": { "type": "boolean" },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "username", "displayName", "coins", "level", "role"]
+    },
+    "LiveRoom": {
+      "title": "LiveRoom",
+      "description": "Live streaming and voice party rooms",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string" },
+        "hostName": { "type": "string" },
+        "hostAvatar": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "country": { "type": "string" },
+        "countryFlag": { "type": "string" },
+        "viewerCount": { "type": "number" },
+        "coverImage": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "ended"] },
+        "isParty": { "type": "boolean" },
+        "tags": { "type": "array" },
+        "chestLevel": { "type": "number" },
+        "vipBadge": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["hostId", "hostName", "title", "category", "status"]
+    },
+    "PostMoment": {
+      "title": "PostMoment",
+      "description": "Community posts and moments with photos",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorAvatar": { "type": "string" },
+        "content": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "likesCount": { "type": "number" },
+        "commentsCount": { "type": "number" },
+        "likedBy": { "type": "array" },
+        "tags": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["authorId", "authorName", "content", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Direct message between users or live room chats",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "roomId": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string" },
+        "gift": { "type": "object" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["senderId", "senderName", "content", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Coin transactions, recharge, and gift history",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["recharge", "gift_sent", "gift_received", "reward", "daily_checkin"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "relatedUser": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "type", "amount", "createdAt"]
+    },
+    "AppEvent": {
+      "title": "AppEvent",
+      "description": "Platform events, tournaments and promotional campaigns",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "bannerUrl": { "type": "string" },
+        "dateRange": { "type": "string" },
+        "description": { "type": "string" },
+        "rewardCoins": { "type": "number" },
+        "status": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["title", "bannerUrl", "status"]
+    },
+    "UserReport": {
+      "title": "UserReport",
+      "description": "Moderation reports submitted by users",
+      "type": "object",
+      "properties": {
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["user", "room", "post"] },
+        "targetId": { "type": "string" },
+        "targetName": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved", "dismissed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["reporterId", "targetType", "targetId", "reason", "status", "createdAt"]
+    },
+    "RoomMember": {
+      "title": "RoomMember",
+      "description": "Active participants and audience in a room",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "userLevel": { "type": "number" },
+        "role": { "type": "string", "enum": ["owner", "admin", "member"] },
+        "isMuted": { "type": "boolean" },
+        "joinedAt": { "type": "string" }
+      },
+      "required": ["userId", "userName", "role", "joinedAt"]
+    },
+    "WebRTCSignal": {
+      "title": "WebRTCSignal",
+      "description": "WebRTC offer, answer, and ICE candidate signaling payloads for voice chat",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "fromUserName": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "type": { "type": "string", "enum": ["offer", "answer", "candidate", "join", "leave", "mute"] },
+        "sdp": { "type": "object" },
+        "candidate": { "type": "object" },
+        "isMuted": { "type": "boolean" },
+        "timestamp": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["roomId", "fromUserId", "toUserId", "type", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notifications for follows, gifts, and events",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "type", "title", "message", "createdAt"]
+    },
+    "AppRelease": {
+      "title": "AppRelease",
+      "description": "Published Android APK builds, download links, and version metadata",
+      "type": "object",
+      "properties": {
+        "version": { "type": "string" },
+        "versionCode": { "type": "number" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "downloadUrl": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "changelog": { "type": "string" },
+        "publishedAt": { "type": "string" },
+        "publishedBy": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "downloadsCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["published", "draft", "archived"] },
+        "minAndroidVersion": { "type": "string" }
+      },
+      "required": ["version", "fileName", "downloadUrl", "publishedAt", "isActive"]
+    }
+  },
+  "firestore": {
+    "/appReleases/{releaseId}": {
+      "schema": { "$ref": "#/entities/AppRelease" },
+      "description": "App releases including active and historical APK builds"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Registered user profiles and wallet details"
+    },
+    "/liveRooms/{roomId}": {
+      "schema": { "$ref": "#/entities/LiveRoom" },
+      "description": "Active and scheduled live and party streaming rooms"
+    },
+    "/liveRooms/{roomId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/RoomMember" },
+      "description": "Current active members in the room"
+    },
+    "/liveRooms/{roomId}/signals/{signalId}": {
+      "schema": { "$ref": "#/entities/WebRTCSignal" },
+      "description": "WebRTC voice chat signaling documents exchanged between participants"
+    },
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/PostMoment" },
+      "description": "Social moments, photo feed, and status updates"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Direct and room chat messages"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Coin transaction history logs"
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/AppEvent" },
+      "description": "Community events and promotional banners"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/UserReport" },
+      "description": "User reports for moderation and trust & safety"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User activity alerts and messages"
+    }
+  }
+}
