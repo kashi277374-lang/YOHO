@@ -1,8 +1,35 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
+
+// Load Firebase Config for server-side room lifecycle cleanup
+let firebaseConfig: any = null;
+try {
+  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  }
+} catch (e) {
+  console.warn('[SignalingServer] Could not load firebase-applet-config.json:', e);
+}
+
+// Server-side helper to delete empty Firestore rooms and left member documents
+const deleteFirestoreDoc = async (docPath: string) => {
+  if (!firebaseConfig?.projectId || !firebaseConfig?.apiKey) return;
+  const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+  const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbId}/documents/${docPath}?key=${firebaseConfig.apiKey}`;
+  try {
+    const res = await fetch(url, { method: 'DELETE' });
+    if (res.ok) {
+      console.log(`[SignalingServer:Firestore] Successfully deleted ${docPath}`);
+    }
+  } catch (err: any) {
+    console.warn(`[SignalingServer:Firestore] Error deleting ${docPath}:`, err.message);
+  }
+};
 
 interface Participant {
   socket: WebSocket;
@@ -115,6 +142,9 @@ async function startServer() {
     if (room.has(userId)) {
       console.log(`[SignalingServer] User ${userId} left room ${roomId} (reason: ${reason})`);
       room.delete(userId);
+      // Clean up user member doc in Firestore
+      deleteFirestoreDoc(`liveRooms/${roomId}/members/${userId}`);
+
       // Immediately notify all remaining participants in the room
       broadcastToRoom(roomId, {
         type: 'user-left',
@@ -127,7 +157,9 @@ async function startServer() {
 
     if (room.size === 0) {
       rooms.delete(roomId);
-      console.log(`[SignalingServer] Room ${roomId} is now empty and cleaned up.`);
+      console.log(`[SignalingServer] Room ${roomId} is now empty. Deleting from Firestore.`);
+      // Delete the empty room document from Firestore immediately so it does not stay live
+      deleteFirestoreDoc(`liveRooms/${roomId}`);
     }
   };
 

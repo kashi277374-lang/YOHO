@@ -316,14 +316,40 @@ export const LiveRoomView: React.FC<LiveRoomViewProps> = ({ room, onClose }) => 
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
       window.removeEventListener('pagehide', handleUnload);
-      // ONLY clean up if user has actually triggered leave or true component destruction
-      if (hasLeftRef.current) {
+      // Clean up completely on component unmount
+      if (!hasLeftRef.current) {
+        hasLeftRef.current = true;
+        try {
+          const payload = JSON.stringify({ userId: currentUser.id || currentUser.uid });
+          if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+            navigator.sendBeacon(`/api/rooms/${room.id}/leave`, payload);
+          }
+          cleanupVoiceChatRef.current?.();
+          if (isUserOnMicRef.current && mySeatIndexRef.current !== -1) {
+            leavePartySeatRef.current?.(room.id, mySeatIndexRef.current);
+          }
+          leaveRoomRef.current?.(room.id);
+        } catch (e) {}
+      } else {
         try {
           cleanupVoiceChatRef.current?.();
         } catch (e) {}
       }
     };
   }, [room.id, currentUser.id, currentUser.uid]);
+
+  // Automatically seat joining participant on the first available mic seat
+  const autoSeatedRef = useRef(false);
+  useEffect(() => {
+    if (autoSeatedRef.current) return;
+    if (mySeatIndex === -1 && room.id && micSeats.length > 0) {
+      const firstEmptyIndex = micSeats.findIndex(s => !s.userId && !s.isLocked);
+      if (firstEmptyIndex !== -1) {
+        autoSeatedRef.current = true;
+        takePartySeat(room.id, firstEmptyIndex);
+      }
+    }
+  }, [room.id, mySeatIndex, micSeats, takePartySeat]);
 
   const handleSeatClick = (seatIndex: number) => {
     unlockAudio();

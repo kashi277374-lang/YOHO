@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getDatabase, Database } from 'firebase/database';
 import { 
   getAuth, 
   signInWithPopup, 
@@ -6,7 +7,7 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut, 
-  signInAnonymously,
+  signInAnonymously, 
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
@@ -41,14 +42,23 @@ import firebaseConfigData from '../../firebase-applet-config.json';
 import { UserProfile, LiveRoom, PostMoment, ChatMessage, AppEvent, UserReport, NotificationItem, AppRelease } from '../types';
 
 // Initialize Firebase App
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfigData);
+export const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfigData);
+
+// Realtime Database instance (for onDisconnect and reliable presence if provisioned)
+let databaseInstance: Database | null = null;
+try {
+  databaseInstance = getDatabase(firebaseApp);
+} catch (e) {
+  // Graceful fallback if RTDB is not provisioned
+}
+export const rtdb = databaseInstance;
 
 // Auth instance
-export const auth = getAuth(app);
+export const auth = getAuth(firebaseApp);
 
 // Firestore instance with the provisioned databaseId and forced long-polling
 // to prevent proxy buffering, sandbox websocket dropouts, and connection errors
-export const db = initializeFirestore(app, {
+export const db = initializeFirestore(firebaseApp, {
   experimentalForceLongPolling: true,
   ignoreUndefinedProperties: true
 }, firebaseConfigData.firestoreDatabaseId || '(default)');
@@ -113,7 +123,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 // Storage instance with the provisioned storageBucket
-export const storage = getStorage(app, firebaseConfigData.storageBucket || undefined);
+export const storage = getStorage(firebaseApp, firebaseConfigData.storageBucket || undefined);
 
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();

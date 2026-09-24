@@ -465,7 +465,8 @@ export const useLiveVoiceChat = ({
       localStreamRef.current = stream;
       const track = stream.getAudioTracks()[0];
       localTrackRef.current = track;
-      track.enabled = !isMutedRef.current;
+      const shouldTransmit = Boolean(isUserOnMicRef.current) && !isMutedRef.current;
+      track.enabled = shouldTransmit;
 
       setMicPermissionState('granted');
       addDebugEvent('mic', `Microphone granted: "${track.label}"`);
@@ -798,24 +799,26 @@ export const useLiveVoiceChat = ({
     });
   }, [participantIds, myUserId, getOrCreatePeerConnection, initiateOffer]);
 
-  // Handle isUserOnMic state changes
+  // Ensure microphone is acquired upon room entry so local audio track is present in WebRTC negotiations
   useEffect(() => {
-    if (isUserOnMic) {
+    if (!roomId || !myUserId) return;
+    setupMicrophone().catch(err => {
+      console.log('[LiveVoiceChat] Background microphone acquisition info:', err.message);
+    });
+  }, [roomId, myUserId, setupMicrophone]);
+
+  // Synchronize audio track transmission when user takes/leaves mic or toggles mute
+  useEffect(() => {
+    const shouldTransmit = Boolean(isUserOnMic) && !isMuted;
+    if (localTrackRef.current) {
+      localTrackRef.current.enabled = shouldTransmit;
+    } else if (isUserOnMic) {
       setupMicrophone().catch(err => {
         console.warn('[LiveVoiceChat] Failed to acquire microphone on mic take:', err);
       });
-    } else {
-      releaseMicrophone();
     }
-  }, [isUserOnMic, setupMicrophone, releaseMicrophone]);
-
-  // Handle microphone mute/unmute
-  useEffect(() => {
-    if (localTrackRef.current) {
-      localTrackRef.current.enabled = !isMuted;
-    }
-    signalingService.sendMuteStatus(roomId, myUserId, isMuted);
-  }, [isMuted, roomId, myUserId]);
+    signalingService.sendMuteStatus(roomId, myUserId, !shouldTransmit);
+  }, [isUserOnMic, isMuted, roomId, myUserId, setupMicrophone]);
 
   // Peer cleanup helper on full teardown
   const cleanupVoiceChat = useCallback(() => {

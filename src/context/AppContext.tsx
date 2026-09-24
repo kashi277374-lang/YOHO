@@ -1596,11 +1596,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const remainingMembers = remainingSnap.docs.filter(d => d.id !== currentUser.id && d.id !== currentUser.uid);
       const remainingCount = remainingMembers.length;
 
-      // Requirement 6: If a room becomes empty, automatically remove/close it
+      // Requirement 6: If a room becomes empty or host left, automatically remove/close it
       if (remainingCount === 0 || (isHost && remainingCount <= 1)) {
-        console.log(`[AppContext] Room ${roomId} is now empty after leave. Cleaning up room.`);
+        console.log(`[AppContext] Room ${roomId} is now empty or host left. Cleaning up room completely.`);
+        // 1. Clean up subcollections
+        const subcollections = ['members', 'signals', 'offers', 'answers', 'candidates'];
+        for (const sub of subcollections) {
+          try {
+            const subSnap = await getDocs(collection(db, 'liveRooms', roomId, sub));
+            for (const d of subSnap.docs) {
+              await deleteDoc(d.ref).catch(() => {});
+            }
+          } catch (e) {}
+        }
+
+        // 2. Delete room doc
         await deleteDoc(doc(db, 'liveRooms', roomId)).catch(() => {});
         setLiveRooms(prev => prev.filter(r => r.id !== roomId));
+        if (activeRoom?.id === roomId) {
+          setActiveRoom(null);
+        }
+
+        // 3. Notify signaling server
+        try {
+          unifiedSignaling.sendRoomEvent(roomId, 'room-ended', { roomId });
+          fetch(`/api/rooms/${roomId}/leave`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId })
+          }).catch(() => {});
+        } catch (e) {}
+
         try {
           const saved = localStorage.getItem('starlive_all_rooms');
           if (saved) {

@@ -13,7 +13,8 @@ import {
   onSnapshot, 
   Unsubscribe 
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref as rtdbRef, set as setRtdb, remove as removeRtdb, onDisconnect } from 'firebase/database';
+import { db, rtdb } from './firebase';
 import { 
   SignalingConnectionStatus, 
   RemoteParticipantPresence, 
@@ -28,6 +29,9 @@ class FirebaseSignalingService {
   private statusListeners = new Set<(status: SignalingConnectionStatus) => void>();
   private eventListeners = new Map<string, Set<SignalingEventHandler>>();
   private unsubSignals: Unsubscribe | null = null;
+  private unsubOffers: Unsubscribe | null = null;
+  private unsubAnswers: Unsubscribe | null = null;
+  private unsubCandidates: Unsubscribe | null = null;
   private unsubMembers: Unsubscribe | null = null;
   private processedDocIds = new Set<string>();
   private lastSpeakingReportTime = 0;
@@ -114,7 +118,115 @@ class FirebaseSignalingService {
       console.warn('[FirebaseSignaling] Could not set room member presence:', err);
     });
 
-    // 2. Listen for signals targeting this user or room
+    // 1b. Realtime Database onDisconnect presence setup (if RTDB is available)
+    if (rtdb) {
+      try {
+        const presenceRef = rtdbRef(rtdb, `rooms/${roomId}/participants/${userData.userId}`);
+        onDisconnect(presenceRef).remove().catch(() => {});
+        setRtdb(presenceRef, {
+          userId: userData.userId,
+          userName: userData.userName || 'User',
+          joinedAt: Date.now(),
+          isMuted: Boolean(userData.isMuted)
+        }).catch(() => {});
+      } catch (e) {
+        console.warn('[FirebaseSignaling] RTDB presence setup fallback:', e);
+      }
+    }
+
+    // 2a. Listen for dedicated WebRTC offers (liveRooms/{roomId}/offers)
+    const offersCol = collection(db, 'liveRooms', roomId, 'offers');
+    this.unsubOffers = onSnapshot(offersCol, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const docId = change.doc.id;
+          const data = change.doc.data();
+          if (!data || data.fromUserId === this.currentUserId) return;
+          if (data.toUserId !== this.currentUserId && data.toUserId !== 'all') return;
+          if (this.processedDocIds.has(docId)) return;
+          this.processedDocIds.add(docId);
+
+          if (data.timestamp && Date.now() - data.timestamp > 30000) {
+            deleteDoc(change.doc.ref).catch(() => {});
+            return;
+          }
+
+          console.log(`[FirebaseSignaling] Received dedicated WebRTC offer from ${data.fromUserId}`);
+          this.emit('offer', {
+            fromUserId: data.fromUserId,
+            toUserId: data.toUserId,
+            sdp: data.sdp,
+            timestamp: data.timestamp,
+          });
+
+          // Delete consumed offer
+          deleteDoc(change.doc.ref).catch(() => {});
+        }
+      });
+    }, (err) => console.warn('[FirebaseSignaling] Offers snapshot error:', err));
+
+    // 2b. Listen for dedicated WebRTC answers (liveRooms/{roomId}/answers)
+    const answersCol = collection(db, 'liveRooms', roomId, 'answers');
+    this.unsubAnswers = onSnapshot(answersCol, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const docId = change.doc.id;
+          const data = change.doc.data();
+          if (!data || data.fromUserId === this.currentUserId) return;
+          if (data.toUserId !== this.currentUserId && data.toUserId !== 'all') return;
+          if (this.processedDocIds.has(docId)) return;
+          this.processedDocIds.add(docId);
+
+          if (data.timestamp && Date.now() - data.timestamp > 30000) {
+            deleteDoc(change.doc.ref).catch(() => {});
+            return;
+          }
+
+          console.log(`[FirebaseSignaling] Received dedicated WebRTC answer from ${data.fromUserId}`);
+          this.emit('answer', {
+            fromUserId: data.fromUserId,
+            toUserId: data.toUserId,
+            sdp: data.sdp,
+            timestamp: data.timestamp,
+          });
+
+          // Delete consumed answer
+          deleteDoc(change.doc.ref).catch(() => {});
+        }
+      });
+    }, (err) => console.warn('[FirebaseSignaling] Answers snapshot error:', err));
+
+    // 2c. Listen for dedicated WebRTC candidates (liveRooms/{roomId}/candidates)
+    const candidatesCol = collection(db, 'liveRooms', roomId, 'candidates');
+    this.unsubCandidates = onSnapshot(candidatesCol, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const docId = change.doc.id;
+          const data = change.doc.data();
+          if (!data || data.fromUserId === this.currentUserId) return;
+          if (data.toUserId !== this.currentUserId && data.toUserId !== 'all') return;
+          if (this.processedDocIds.has(docId)) return;
+          this.processedDocIds.add(docId);
+
+          if (data.timestamp && Date.now() - data.timestamp > 30000) {
+            deleteDoc(change.doc.ref).catch(() => {});
+            return;
+          }
+
+          this.emit('candidate', {
+            fromUserId: data.fromUserId,
+            toUserId: data.toUserId,
+            candidate: data.candidate,
+            timestamp: data.timestamp,
+          });
+
+          // Delete consumed candidate
+          deleteDoc(change.doc.ref).catch(() => {});
+        }
+      });
+    }, (err) => console.warn('[FirebaseSignaling] Candidates snapshot error:', err));
+
+    // 2d. Listen for signals targeting this user or room (broadcast & backward compatibility)
     const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
     this.unsubSignals = onSnapshot(signalsCol, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
@@ -262,7 +374,18 @@ class FirebaseSignalingService {
       try { this.unsubSignals(); } catch (e) {}
       this.unsubSignals = null;
     }
-
+    if (this.unsubOffers) {
+      try { this.unsubOffers(); } catch (e) {}
+      this.unsubOffers = null;
+    }
+    if (this.unsubAnswers) {
+      try { this.unsubAnswers(); } catch (e) {}
+      this.unsubAnswers = null;
+    }
+    if (this.unsubCandidates) {
+      try { this.unsubCandidates(); } catch (e) {}
+      this.unsubCandidates = null;
+    }
     if (this.unsubMembers) {
       try { this.unsubMembers(); } catch (e) {}
       this.unsubMembers = null;
@@ -272,6 +395,14 @@ class FirebaseSignalingService {
       // Remove presence doc from members subcollection
       const memberRef = doc(db, 'liveRooms', roomId, 'members', userId);
       deleteDoc(memberRef).catch(() => {});
+
+      // Remove RTDB presence if provisioned
+      if (rtdb) {
+        try {
+          const presenceRef = rtdbRef(rtdb, `rooms/${roomId}/participants/${userId}`);
+          removeRtdb(presenceRef).catch(() => {});
+        } catch (e) {}
+      }
 
       // Broadcast leave signal
       const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
@@ -293,12 +424,13 @@ class FirebaseSignalingService {
 
   /**
    * Sends an SDP offer to a specific peer.
+   * Uses isolated path liveRooms/{roomId}/offers/{toUserId}_{fromUserId} to prevent data collisions.
    */
   public async sendOffer(roomId: string, fromUserId: string, toUserId: string, sdp: RTCSessionDescriptionInit) {
     if (!roomId || !toUserId) return;
     try {
-      const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
-      await addDoc(signalsCol, {
+      const offerDocRef = doc(db, 'liveRooms', roomId, 'offers', `${toUserId}_${fromUserId}`);
+      const payload = {
         roomId,
         fromUserId,
         toUserId,
@@ -308,7 +440,13 @@ class FirebaseSignalingService {
           sdp: sdp.sdp,
         },
         timestamp: Date.now(),
-      });
+      };
+      await setDoc(offerDocRef, payload);
+
+      // Also send to signals for dual fallback
+      const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
+      addDoc(signalsCol, payload).catch(() => {});
+
       console.log(`[FirebaseSignaling] Sent offer to ${toUserId}`);
     } catch (err: any) {
       console.error('[FirebaseSignaling] Error sending offer:', err);
@@ -317,12 +455,13 @@ class FirebaseSignalingService {
 
   /**
    * Sends an SDP answer to a specific peer.
+   * Uses isolated path liveRooms/{roomId}/answers/{toUserId}_{fromUserId} to prevent data collisions.
    */
   public async sendAnswer(roomId: string, fromUserId: string, toUserId: string, sdp: RTCSessionDescriptionInit) {
     if (!roomId || !toUserId) return;
     try {
-      const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
-      await addDoc(signalsCol, {
+      const answerDocRef = doc(db, 'liveRooms', roomId, 'answers', `${toUserId}_${fromUserId}`);
+      const payload = {
         roomId,
         fromUserId,
         toUserId,
@@ -332,7 +471,13 @@ class FirebaseSignalingService {
           sdp: sdp.sdp,
         },
         timestamp: Date.now(),
-      });
+      };
+      await setDoc(answerDocRef, payload);
+
+      // Also send to signals for dual fallback
+      const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
+      addDoc(signalsCol, payload).catch(() => {});
+
       console.log(`[FirebaseSignaling] Sent answer to ${toUserId}`);
     } catch (err: any) {
       console.error('[FirebaseSignaling] Error sending answer:', err);
@@ -341,12 +486,13 @@ class FirebaseSignalingService {
 
   /**
    * Sends an ICE candidate to a specific peer.
+   * Uses dedicated collection liveRooms/{roomId}/candidates.
    */
   public async sendCandidate(roomId: string, fromUserId: string, toUserId: string, candidate: RTCIceCandidateInit) {
     if (!roomId || !toUserId) return;
     try {
-      const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
-      await addDoc(signalsCol, {
+      const candDocRef = doc(db, 'liveRooms', roomId, 'candidates', `${toUserId}_${fromUserId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+      const payload = {
         roomId,
         fromUserId,
         toUserId,
@@ -358,7 +504,12 @@ class FirebaseSignalingService {
           usernameFragment: candidate.usernameFragment ?? null,
         },
         timestamp: Date.now(),
-      });
+      };
+      await setDoc(candDocRef, payload);
+
+      // Also send to signals for dual fallback
+      const signalsCol = collection(db, 'liveRooms', roomId, 'signals');
+      addDoc(signalsCol, payload).catch(() => {});
     } catch (err: any) {
       console.error('[FirebaseSignaling] Error sending candidate:', err);
     }
